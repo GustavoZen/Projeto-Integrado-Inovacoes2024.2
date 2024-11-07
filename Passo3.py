@@ -1,6 +1,3 @@
-''' • Algoritmos de Movimentação: Funções para registrar entradas e saídas de produtos e atualizar o estoque. 
-    • Relatórios e Consultas: Funções para gerar relatórios e consultar o histórico de movimentações.'''
-
 #===================================
 # IMPORTAÇÕES
 #===================================
@@ -8,6 +5,7 @@
 import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox
+from datetime import datetime
 
 #===================================
 # CLASSE REFERENTE AO BANCO DE DADOS
@@ -39,6 +37,7 @@ class Produto:
 # FUNÇÕES PARA O BANCO DE DADOS
 #===================================
 '''!!• Algoritmos de Cadastro e Consulta: Funções para cadastrar e consultar dados no sistema.!!'''
+
 # Função para buscar produtos pelo nome
 def buscar_produtos():
     nome = entry_nome.get()  # Obter o nome do produto digitado
@@ -131,7 +130,6 @@ def abrir_cadastro():
     btn_salvar = tk.Button(cadastro_window, text="Salvar", command=salvar_produto)
     btn_salvar.grid(row=10, column=0, columnspan=2, pady=10)
 
-
 # Função para deletar produto
 def deletar_produto():
     # Obter o item selecionado na Treeview
@@ -210,6 +208,116 @@ def editar_produto():
     btn_salvar = tk.Button(edit_window, text="Salvar", command=salvar_edicao)
     btn_salvar.grid(row=len(fields), column=0, columnspan=2, pady=10)
 
+# Função referente as movimentações
+def registrar_movimentacao():
+    movimento_window = tk.Toplevel(root)
+    movimento_window.title("Movimentação de Produto")
+    movimento_window.geometry("400x400")
+
+    def verificar_id():
+        idmov = entry_id_cad.get()
+        conn = sqlite3.connect('GerenciamentodeEstoque.db')
+        cursor = conn.cursor()
+        
+        # Realiza a consulta ao banco de dados
+        cursor.execute("SELECT * FROM 'GerenciamentodeEstoque' WHERE Id = ?", (idmov,))
+        resultado = cursor.fetchone()
+        conn.close()
+        
+        # Atualiza o texto do label com o nome do produto
+        if resultado:
+            label_produto.config(text=f"{resultado[1]}")  # Nome do produto
+        else:
+            label_produto.config(text="Produto não encontrado.")
+
+    def realizar_movimentacao(tipo):
+        idmov = entry_id_cad.get()
+        quantidade_movimento = int(entry_quantidade.get())
+        
+        conn = sqlite3.connect('GerenciamentodeEstoque.db')
+        cursor = conn.cursor()
+        
+        # Verificar se o produto existe e obter a quantidade atual
+        cursor.execute("SELECT * FROM 'GerenciamentodeEstoque' WHERE Id = ?", (idmov,))
+        resultado = cursor.fetchone()
+        
+        if resultado is None:
+            conn.close()
+            messagebox.showerror("Erro", "Produto não encontrado!")
+            return
+
+        quantidade_atual = resultado[4]  # Supondo que a coluna de quantidade seja a quinta coluna (índice 4)
+        
+        # Lógica de movimentação: "saída" diminui, "entrada" aumenta a quantidade
+        if tipo == 'saída':
+            if quantidade_atual >= quantidade_movimento:
+                nova_quantidade = quantidade_atual - quantidade_movimento
+            else:
+                messagebox.showerror("Erro", "Quantidade insuficiente em estoque!")
+                conn.close()
+                return
+        elif tipo == 'entrada':
+            nova_quantidade = quantidade_atual + quantidade_movimento
+        
+        # Atualizar a quantidade na tabela GerenciamentodeEstoque
+        cursor.execute("UPDATE GerenciamentodeEstoque SET QntdAtual = ? WHERE Id = ?", (nova_quantidade, idmov))
+        
+        # Registrar a movimentação na tabela Movimentacoes
+        cursor.execute("INSERT INTO movimentacoes (IdProduto, Quantidade, TipodeTransacao, Data) VALUES (?, ?, ?, ?)", 
+                       (idmov, quantidade_movimento, tipo, datetime.now()))
+        
+        conn.commit()
+        conn.close()
+        
+        messagebox.showinfo("Sucesso", f"{'Venda' if tipo == 'saída' else 'Adição'} realizada com sucesso!")
+
+    # Interface da janela de movimentação
+    tk.Label(movimento_window, text="Id do Produto").grid(row=0, column=0, padx=10, pady=5)
+    entry_id_cad = tk.Entry(movimento_window)
+    entry_id_cad.grid(row=0, column=1, padx=10, pady=5)
+
+    # Botão para checar o ID do produto
+    btn_checar = tk.Button(movimento_window, text="Checar", command=verificar_id)
+    btn_checar.grid(row=0, column=2, columnspan=2, pady=10)
+    
+    # Label para mostrar o resultado da verificação
+    label_produto = tk.Label(movimento_window, text="")
+    label_produto.grid(row=1, column=0, columnspan=3)
+
+    # Campo para quantidade a ser movimentada
+    tk.Label(movimento_window, text="Quantidade a ser movimentada:").grid(row=2, column=0, padx=10, pady=5)
+    entry_quantidade = tk.Entry(movimento_window)
+    entry_quantidade.grid(row=2, column=1, padx=10, pady=5)
+
+    # Botões para realizar a movimentação
+    btn_vender = tk.Button(movimento_window, text="Venda", command=lambda: realizar_movimentacao('saída'))
+    btn_vender.grid(row=3, column=0, padx=10, pady=5)
+
+    btn_adicionar = tk.Button(movimento_window, text="Adicionar", command=lambda: realizar_movimentacao('entrada'))
+    btn_adicionar.grid(row=3, column=1, padx=10, pady=5)
+
+# Função para gerar relatórios
+def gerar_relatorio():
+    conn = sqlite3.connect('GerenciamentodeEstoque.db')
+    cursor = conn.cursor()
+    
+    # Consultar todas as linhas da tabela GerenciamentodeEstoque
+    print("Tabela: GerenciamentodeEstoque")
+    cursor.execute("SELECT * FROM GerenciamentodeEstoque")
+    produtos = cursor.fetchall()
+    for produto in produtos:
+        print(produto)
+    
+    print("\nTabela: Movimentacoes")
+    # Consultar todas as linhas da tabela Movimentacoes
+    cursor.execute("SELECT * FROM movimentacoes")
+    movimentacoes = cursor.fetchall()
+    for movimentacao in movimentacoes:
+        print(movimentacao)
+
+    # Fechar a conexão com o banco de dados
+    conn.close()
+
 #===================================
 #INTERFACE COM TKINTER
 #===================================
@@ -233,7 +341,7 @@ button_frame.pack(pady=10)
 btn_buscar = tk.Button(button_frame, text="Buscar", command=buscar_produtos)
 btn_buscar.grid(row=0, column=0, padx=5)
 
-btn_cadastrar = tk.Button(button_frame, text="+", command=abrir_cadastro)
+btn_cadastrar = tk.Button(button_frame, text="Adicionar Produto", command=abrir_cadastro)
 btn_cadastrar.grid(row=0, column=1, padx=5)
 
 btn_editar = tk.Button(button_frame, text="Editar", command=editar_produto)
@@ -242,6 +350,11 @@ btn_editar.grid(row=0, column=2, padx=5)
 btn_deletar = tk.Button(button_frame, text="Deletar", command=deletar_produto)
 btn_deletar.grid(row=0, column=3, padx=5)
 
+btn_vendas = tk.Button(button_frame, text="Vender", command=registrar_movimentacao)
+btn_vendas.grid(row=0, column=4, padx=5)
+
+btn_relatorio = tk.Button(button_frame, text="Relatório",command=gerar_relatorio)
+btn_relatorio.grid(row=0, column=5, padx=5)
 #===================================
 #TABELA TREE-VIEW PARA VISUALIZAR BANCO DE DADOS
 #===================================
